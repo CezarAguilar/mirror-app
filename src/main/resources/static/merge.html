@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mirror App - Merge conflicts</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main>
+    <h1>Merge conflicts</h1>
+    <p><a href="/index.html">Home</a> | <a href="/dashboard.html">Dashboard</a></p>
+    <form id="filter-form">
+      <label>Mirror GUID filter (optional) <input name="mirrorGuid" /></label>
+      <button type="submit">Reload</button>
+    </form>
+    <div id="conflicts"></div>
+  </main>
+  <script>
+    async function loadConflicts(mirrorGuid) {
+      const url = new URL("/api/v1/management/conflicts", window.location.origin);
+      if (mirrorGuid) {
+        url.searchParams.set("mirrorGuid", mirrorGuid);
+      }
+      const res = await fetch(url);
+      const items = await res.json();
+      const root = document.getElementById("conflicts");
+      root.innerHTML = "";
+      items.forEach((c) => {
+        const section = document.createElement("section");
+        section.innerHTML =
+          "<h2>Conflict #" +
+          c.id +
+          "</h2>" +
+          "<p>Mirror: " +
+          c.mirrorGuid +
+          "</p>" +
+          "<p>Path: " +
+          c.relativePath +
+          "</p>" +
+          "<p>Status: " +
+          c.status +
+          "</p>";
+        const preLocal = document.createElement("pre");
+        preLocal.textContent = "Local snapshot:\n" + (c.localTextSnapshot || "");
+        const preRemote = document.createElement("pre");
+        preRemote.textContent = "Remote snapshot:\n" + (c.remoteTextSnapshot || "");
+        const form = document.createElement("form");
+        form.innerHTML =
+          "<label>Resolution <select name=\"resolution\"><option value=\"LOCAL\">LOCAL</option><option value=\"REMOTE\">REMOTE</option><option value=\"CUSTOM\">CUSTOM</option></select></label>" +
+          "<label>Custom content<textarea name=\"customContent\" rows=\"8\" cols=\"80\"></textarea></label>" +
+          "<button type=\"submit\">Resolve</button>";
+        form.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const fd = new FormData(form);
+          const body = { resolution: fd.get("resolution") };
+          if (body.resolution === "CUSTOM") {
+            body.customContent = fd.get("customContent");
+          }
+          const resp = await fetch("/api/v1/management/conflicts/" + c.id + "/resolve", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          if (!resp.ok) {
+            alert("Resolve failed: " + (await resp.text()));
+            return;
+          }
+          await loadConflicts(mirrorGuid);
+        });
+        section.appendChild(preLocal);
+        section.appendChild(preRemote);
+        section.appendChild(form);
+        root.appendChild(section);
+      });
+    }
+
+    document.getElementById("filter-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      await loadConflicts(fd.get("mirrorGuid"));
+    });
+
+    loadConflicts("");
+  </script>
+</body>
+</html>

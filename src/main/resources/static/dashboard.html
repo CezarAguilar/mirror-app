@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mirror App - Dashboard</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main>
+    <h1>Synced folders</h1>
+    <p><a href="/index.html">Home</a> | <a href="/merge.html">Merge conflicts</a></p>
+
+    <section>
+      <h2>Node identity</h2>
+      <div id="node"></div>
+      <form id="node-form">
+        <label>Display name <input name="displayName" required /></label>
+        <button type="submit">Save</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Peer endpoints</h2>
+      <ul id="peers"></ul>
+      <form id="peer-form">
+        <label>Base URL <input name="baseUrl" placeholder="http://192.168.1.10:8080" required /></label>
+        <button type="submit">Add peer</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>Local replicas</h2>
+      <table id="replicas">
+        <thead>
+          <tr>
+            <th>Mirror GUID</th>
+            <th>Root path</th>
+            <th>Mirror paused</th>
+            <th>Replica paused</th>
+            <th>Open conflicts</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Register replica</h2>
+      <form id="replica-form">
+        <label>Mirror GUID (optional) <input name="mirrorGuid" /></label>
+        <label>Shared secret (optional) <input name="sharedSecret" /></label>
+        <label>Root path <input name="rootPath" required /></label>
+        <button type="submit">Register</button>
+      </form>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+  <script>
+    async function loadNode() {
+      const res = await fetch("/api/v1/management/node");
+      const data = await res.json();
+      document.getElementById("node").textContent = "Display name: " + data.displayName;
+      document.querySelector("#node-form input[name=displayName]").value = data.displayName;
+    }
+
+    async function loadPeers() {
+      const res = await fetch("/api/v1/management/peers");
+      const peers = await res.json();
+      const ul = document.getElementById("peers");
+      ul.innerHTML = "";
+      peers.forEach((p) => {
+        const li = document.createElement("li");
+        li.textContent = p.baseUrl + " ";
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = "Remove";
+        btn.addEventListener("click", async () => {
+          await fetch("/api/v1/management/peers/" + p.id, { method: "DELETE" });
+          await loadPeers();
+        });
+        li.appendChild(btn);
+        ul.appendChild(li);
+      });
+    }
+
+    async function loadReplicas() {
+      const res = await fetch("/api/v1/management/replicas");
+      const rows = await res.json();
+      const tbody = document.querySelector("#replicas tbody");
+      tbody.innerHTML = "";
+      rows.forEach((r) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          "<td>" +
+          r.mirrorGuid +
+          "</td><td>" +
+          r.rootPath +
+          "</td><td>" +
+          r.mirrorPaused +
+          "</td><td>" +
+          r.replicaPaused +
+          "</td><td>" +
+          r.openConflictCount +
+          "</td><td class=\"actions\"></td>";
+        const actions = tr.querySelector(".actions");
+        const pauseMirrorBtn = document.createElement("button");
+        pauseMirrorBtn.type = "button";
+        pauseMirrorBtn.textContent = r.mirrorPaused ? "Resume mirror" : "Pause mirror";
+        pauseMirrorBtn.addEventListener("click", async () => {
+          if (r.mirrorPaused) {
+            const strategy = window.prompt("Resume strategy: OVERWRITE_ALL or MERGE_REQUIRED", "OVERWRITE_ALL");
+            if (!strategy) {
+              return;
+            }
+            let body = { strategy: strategy };
+            if (strategy === "OVERWRITE_ALL") {
+              const authority = window.prompt("Overwrite authority: LOCAL or REMOTE", "LOCAL");
+              body.overwriteAuthority = authority || "LOCAL";
+            }
+            const resp = await fetch("/api/v1/management/replicas/" + r.mirrorGuid + "/resume", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            });
+            const result = await resp.json();
+            alert(result.message + " unpaused=" + result.unpaused + " openConflicts=" + result.openConflicts);
+          } else {
+            await fetch("/api/v1/management/replicas/" + r.mirrorGuid + "/mirror-pause", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ paused: true }),
+            });
+          }
+          await loadReplicas();
+        });
+        const pauseReplicaBtn = document.createElement("button");
+        pauseReplicaBtn.type = "button";
+        pauseReplicaBtn.textContent = r.replicaPaused ? "Resume replica" : "Pause replica";
+        pauseReplicaBtn.addEventListener("click", async () => {
+          await fetch("/api/v1/management/replicas/" + r.mirrorGuid + "/replica-pause", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paused: !r.replicaPaused }),
+          });
+          await loadReplicas();
+        });
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.textContent = "Delete";
+        deleteBtn.addEventListener("click", async () => {
+          if (!window.confirm("Delete replica " + r.mirrorGuid + "?")) {
+            return;
+          }
+          await fetch("/api/v1/management/replicas/" + r.mirrorGuid, { method: "DELETE" });
+          await loadReplicas();
+        });
+        actions.appendChild(pauseMirrorBtn);
+        actions.appendChild(pauseReplicaBtn);
+        actions.appendChild(deleteBtn);
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById("node-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      await fetch("/api/v1/management/node", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: fd.get("displayName") }),
+      });
+      await loadNode();
+    });
+
+    document.getElementById("peer-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      await fetch("/api/v1/management/peers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl: fd.get("baseUrl") }),
+      });
+      e.target.reset();
+      await loadPeers();
+    });
+
+    document.getElementById("replica-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const payload = { rootPath: fd.get("rootPath") };
+      const guid = fd.get("mirrorGuid");
+      const secret = fd.get("sharedSecret");
+      if (guid) {
+        payload.mirrorGuid = guid;
+      }
+      if (secret) {
+        payload.sharedSecret = secret;
+      }
+      const resp = await fetch("/api/v1/management/replicas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        alert("Register failed: " + (await resp.text()));
+        return;
+      }
+      e.target.reset();
+      await loadReplicas();
+    });
+
+    loadNode();
+    loadPeers();
+    loadReplicas();
+  </script>
+</body>
+</html>
