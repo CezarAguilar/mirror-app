@@ -116,7 +116,6 @@ public class MirrorRegistryApplicationService {
             throw new IllegalArgumentException("Mirror GUID already exists on this node");
         }
         MirrorDefinitionEntity mirror = new MirrorDefinitionEntity(guid, secret);
-        mirrorDefinitionRepository.save(mirror);
         LocalReplicaEntity replica = new LocalReplicaEntity(mirror, root.toAbsolutePath().toString());
         localReplicaRepository.save(replica);
         fileIndexService.fullRescanMirrorReturningDelta(guid);
