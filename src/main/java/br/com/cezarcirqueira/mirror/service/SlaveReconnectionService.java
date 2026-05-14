@@ -12,6 +12,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.List;
 import java.util.Map;
@@ -156,10 +157,14 @@ public class SlaveReconnectionService {
 
     private void downloadMissingFile(String masterBase, String guid, String relativePath, String localFolder) {
         try {
-            byte[] data = restTemplate.getForObject(
-                    masterBase + "/api/files/download?guid=" + guid + "&path=" + java.net.URLEncoder.encode(relativePath, "UTF-8"),
-                    byte[].class
-            );
+            java.net.URI uri = UriComponentsBuilder
+                    .fromHttpUrl(masterBase + "/api/files/download")
+                    .queryParam("guid", guid)
+                    .queryParam("path", relativePath)
+                    .build()
+                    .encode()
+                    .toUri();
+            byte[] data = restTemplate.getForObject(uri, byte[].class);
             if (data != null) {
                 java.nio.file.Path target = java.nio.file.Paths.get(localFolder,
                         relativePath.replace("/", java.nio.file.FileSystems.getDefault().getSeparator()));

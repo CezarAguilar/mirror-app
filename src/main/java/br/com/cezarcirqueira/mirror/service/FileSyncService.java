@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
+import org.springframework.web.util.UriComponentsBuilder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -139,9 +140,15 @@ public class FileSyncService {
 
     private void downloadFromPeer(String peerIp, String guid, String relativePath, String localFolderPath) {
         int port = resolvePort(peerIp);
-        String url = "http://" + peerIp + ":" + port + "/api/files/download?guid=" + guid + "&path=" + encode(relativePath);
         try {
-            ResponseEntity<byte[]> response = restTemplate.getForEntity(url, byte[].class);
+            java.net.URI uri = UriComponentsBuilder
+                    .fromHttpUrl("http://" + peerIp + ":" + port + "/api/files/download")
+                    .queryParam("guid", guid)
+                    .queryParam("path", relativePath)
+                    .build()
+                    .encode()
+                    .toUri();
+            ResponseEntity<byte[]> response = restTemplate.getForEntity(uri, byte[].class);
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Path target = Paths.get(localFolderPath, relativePath.replace("/", FileSystems.getDefault().getSeparator()));
                 Files.createDirectories(target.getParent());
@@ -171,11 +178,4 @@ public class FileSyncService {
         return serverPort;
     }
 
-    private String encode(String value) {
-        try {
-            return java.net.URLEncoder.encode(value, "UTF-8");
-        } catch (Exception e) {
-            return value;
-        }
-    }
 }
