@@ -1,2 +1,0 @@
-org.springframework.context.ApplicationContextInitializer=\
-br.com.cezarcirqueira.mirror.app.MirrorApplicationContextInitializer
