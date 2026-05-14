@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Mirror App - Secundario</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<!-- Header -->
+<header class="bg-white shadow-sm">
+    <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div class="border-2 border-gray-300 rounded px-5 py-1 text-gray-500 font-semibold tracking-widest text-sm">
+            LOGO
+        </div>
+        <div class="flex items-center gap-3">
+            <span id="info-name" class="text-sm text-gray-500"></span>
+            <span class="inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1 rounded-full">Secundario</span>
+        </div>
+    </div>
+</header>
+
+<!-- Tabs -->
+<div class="max-w-5xl mx-auto px-6 mt-6">
+    <div class="flex border-b border-gray-200 mb-6">
+        <button id="tab-devices" onclick="showTab('devices')"
+                class="px-6 py-3 text-sm font-semibold border-b-2 border-blue-600 text-blue-600 -mb-px">
+            Dispositivos
+        </button>
+        <button id="tab-folders" onclick="showTab('folders')"
+                class="px-6 py-3 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700 -mb-px">
+            Pastas Sincronizadas
+        </button>
+    </div>
+
+    <!-- Devices Tab -->
+    <div id="panel-devices">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Dispositivo Secundario</h2>
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Nome da Maquina</label>
+                    <input id="self-name" type="text" readonly
+                           class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-700 text-sm cursor-not-allowed"/>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 mb-1">Endereco IP</label>
+                    <input id="self-ip" type="text" readonly
+                           class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-700 text-sm cursor-not-allowed"/>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs text-gray-400 mb-1">Maquina Principal</label>
+                    <input id="master-name-display" type="text" readonly
+                           class="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-700 text-sm cursor-not-allowed"/>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Folders Tab -->
+    <div id="panel-folders" class="hidden">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Pastas Sincronizadas</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                    <tr class="border-b border-gray-100">
+                        <th class="text-left py-2 px-3 text-gray-500 font-medium">Guid</th>
+                        <th class="text-left py-2 px-3 text-gray-500 font-medium">Endereco Remoto</th>
+                        <th class="text-left py-2 px-3 text-gray-500 font-medium">Endereco Local</th>
+                    </tr>
+                    </thead>
+                    <tbody id="folders-table">
+                    <tr>
+                        <td colspan="3" class="py-6 text-center text-gray-400">Carregando...</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Directory browser modal -->
+<div id="browse-modal" class="hidden fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <h3 class="font-semibold text-gray-700 mb-3">Selecionar pasta local</h3>
+        <div class="flex gap-2 mb-3">
+            <input id="browse-path" type="text" readonly
+                   class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-600 font-mono"/>
+            <button onclick="browseUp()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50">
+                Subir
+            </button>
+        </div>
+        <div id="browse-list" class="border border-gray-200 rounded-lg h-64 overflow-y-auto text-sm">
+            <div class="text-center text-gray-400 py-8">Carregando...</div>
+        </div>
+        <div class="flex gap-3 mt-4">
+            <button onclick="closeBrowse()"
+                    class="flex-1 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 text-sm">
+                Cancelar
+            </button>
+            <button onclick="confirmBrowse()"
+                    class="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold">
+                Selecionar
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let activeTab = 'devices';
+    let currentBrowsePath = '';
+    let browseTargetGuid = null;
+
+    async function init() {
+        try {
+            const info = await fetchJson('/api/setup/info');
+            if (!info || info.role !== 'SLAVE') {
+                window.location.href = '/';
+                return;
+            }
+            document.getElementById('self-name').value = info.name;
+            document.getElementById('self-ip').value = info.ip;
+
+            const masterDisplay = (info.masterName || info.masterIp) + (info.masterIp ? ' (' + info.masterIp + ')' : '');
+            document.getElementById('master-name-display').value = masterDisplay;
+            document.getElementById('info-name').textContent = info.name;
+        } catch (e) {
+            console.error('Init error', e);
+        }
+    }
+
+    function showTab(name) {
+        activeTab = name;
+        document.getElementById('panel-devices').classList.toggle('hidden', name !== 'devices');
+        document.getElementById('panel-folders').classList.toggle('hidden', name !== 'folders');
+        document.getElementById('tab-devices').className = tabClass(name === 'devices');
+        document.getElementById('tab-folders').className = tabClass(name === 'folders');
+        if (name === 'folders') loadFolders();
+    }
+
+    function tabClass(active) {
+        return active
+            ? 'px-6 py-3 text-sm font-semibold border-b-2 border-blue-600 text-blue-600 -mb-px'
+            : 'px-6 py-3 text-sm font-semibold border-b-2 border-transparent text-gray-500 hover:text-gray-700 -mb-px';
+    }
+
+    async function loadFolders() {
+        const mappings = await fetchJson('/api/slave/mappings') || [];
+        const tbody = document.getElementById('folders-table');
+
+        if (mappings.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" class="py-6 text-center text-gray-400">Nenhuma pasta registrada pelo Principal.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = mappings.map(m => `
+            <tr class="border-b border-gray-50 hover:bg-gray-50">
+                <td class="py-3 px-3 text-gray-400 font-mono text-xs">${escHtml(m.guid)}</td>
+                <td class="py-3 px-3 text-gray-600">${escHtml(m.remoteAddress)}</td>
+                <td class="py-3 px-3">${localCell(m)}</td>
+            </tr>`).join('');
+    }
+
+    function localCell(m) {
+        if (m.localPath && m.localPath !== '') {
+            return `
+                <div class="flex items-center gap-2">
+                    <span class="text-gray-700 text-xs truncate max-w-xs">${escHtml(m.localPath)}</span>
+                    <button onclick="removeMapping('${escHtml(m.guid)}')"
+                            class="text-xs px-2 py-1 rounded border border-red-400 text-red-600 hover:bg-red-50 flex-shrink-0">
+                        Excluir
+                    </button>
+                </div>`;
+        }
+        return `
+            <div class="flex items-center gap-2">
+                <input id="local-${escHtml(m.guid)}" type="text" placeholder="Caminho local"
+                       class="flex-1 border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"/>
+                <button onclick="openBrowseModal('${escHtml(m.guid)}')"
+                        class="text-xs px-2 py-1 rounded border border-gray-300 hover:bg-gray-50 flex-shrink-0">
+                    Procurar
+                </button>
+                <button onclick="saveMapping('${escHtml(m.guid)}')"
+                        class="text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 flex-shrink-0">
+                    Salvar
+                </button>
+            </div>`;
+    }
+
+    async function saveMapping(guid) {
+        const input = document.getElementById('local-' + guid);
+        const localPath = input ? input.value.trim() : '';
+        if (!localPath) {
+            alert('Informe o caminho local.');
+            return;
+        }
+        const res = await fetch('/api/slave/mappings/' + encodeURIComponent(guid) + '/local', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({localPath})
+        });
+        if (res.ok) loadFolders();
+        else alert('Erro ao salvar mapeamento.');
+    }
+
+    async function removeMapping(guid) {
+        if (!confirm('Remover mapeamento local desta pasta?')) return;
+        const res = await fetch('/api/slave/mappings/' + encodeURIComponent(guid) + '/local', {method: 'DELETE'});
+        if (res.ok) loadFolders();
+    }
+
+    // ---- Directory browser ----
+    function openBrowseModal(guid) {
+        browseTargetGuid = guid;
+        document.getElementById('browse-modal').classList.remove('hidden');
+        browseTo('');
+    }
+
+    function closeBrowse() {
+        document.getElementById('browse-modal').classList.add('hidden');
+        browseTargetGuid = null;
+    }
+
+    async function confirmBrowse() {
+        if (!browseTargetGuid || !currentBrowsePath) {
+            closeBrowse();
+            return;
+        }
+        const res = await fetch('/api/slave/mappings/' + encodeURIComponent(browseTargetGuid) + '/local', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({localPath: currentBrowsePath})
+        });
+        closeBrowse();
+        if (res.ok) loadFolders();
+        else alert('Erro ao salvar mapeamento.');
+    }
+
+    function browseUp() {
+        if (!currentBrowsePath) return;
+        const parts = currentBrowsePath.replace(/\\/g, '/').split('/').filter(Boolean);
+        parts.pop();
+        browseTo(parts.length === 0 ? '' : parts.join('/'));
+    }
+
+    async function browseTo(path) {
+        currentBrowsePath = path;
+        document.getElementById('browse-path').value = path;
+        const list = document.getElementById('browse-list');
+        list.innerHTML = '<div class="text-center text-gray-400 py-8">Carregando...</div>';
+
+        try {
+            const items = await fetchJson('/api/files/browse?path=' + encodeURIComponent(path)) || [];
+            if (items.length === 0) {
+                list.innerHTML = '<div class="text-center text-gray-400 py-8">Pasta vazia.</div>';
+                return;
+            }
+            list.innerHTML = items.map(item => `
+                <div onclick="browseTo('${escHtml(item.path)}')"
+                     class="flex items-center gap-2 px-4 py-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0">
+                    <svg class="w-4 h-4 text-yellow-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M2 6a2 2 0 012-2h4l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
+                    </svg>
+                    <span class="text-sm text-gray-700">${escHtml(item.name)}</span>
+                </div>`).join('');
+        } catch (e) {
+            list.innerHTML = '<div class="text-center text-red-400 py-8">Erro ao listar diretorio.</div>';
+        }
+    }
+
+    function escHtml(s) {
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    async function fetchJson(url) {
+        try {
+            const res = await fetch(url);
+            if (!res.ok) return null;
+            return await res.json();
+        } catch (e) {
+            return null;
+        }
+    }
+
+    init();
+</script>
+</body>
+</html>
