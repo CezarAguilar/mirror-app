@@ -1,6 +1,7 @@
 package br.com.cezarcirqueira.mirror.controller;
 
 import br.com.cezarcirqueira.mirror.service.AppStateService;
+import br.com.cezarcirqueira.mirror.service.FileWatcherService;
 import br.com.cezarcirqueira.mirror.service.FolderRegistryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,11 +28,14 @@ public class FileTransferController {
 
     private final AppStateService appStateService;
     private final FolderRegistryService folderRegistryService;
+    private final FileWatcherService fileWatcherService;
 
     public FileTransferController(AppStateService appStateService,
-                                   FolderRegistryService folderRegistryService) {
+                                   FolderRegistryService folderRegistryService,
+                                   FileWatcherService fileWatcherService) {
         this.appStateService = appStateService;
         this.folderRegistryService = folderRegistryService;
+        this.fileWatcherService = fileWatcherService;
     }
 
     @PostMapping("/files/upload")
@@ -49,6 +53,7 @@ public class FileTransferController {
             Path target = Paths.get(folderPath.get(),
                     relativePath.replace("/", FileSystems.getDefault().getSeparator()));
             Files.createDirectories(target.getParent());
+            fileWatcherService.suppressFor(guid, relativePath);
             file.transferTo(target);
             log.info("File uploaded: {} in guid={}", relativePath, guid);
             return ResponseEntity.ok().build();

@@ -24,6 +24,7 @@ public class FileWatcherService {
     private WatchService watchService;
     private final Map<WatchKey, WatchedFolder> keyMap = new ConcurrentHashMap<>();
     private final Map<String, WatchKey> guidToKey = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Long> suppressedUntil = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "file-watcher");
         t.setDaemon(true);
@@ -71,6 +72,20 @@ public class FileWatcherService {
         }
     }
 
+    public void suppressFor(String guid, String relativePath) {
+        suppressedUntil.put(guid + ":" + relativePath, System.currentTimeMillis() + 1000);
+    }
+
+    private boolean isSuppressed(String guid, String relativePath) {
+        Long expiry = suppressedUntil.get(guid + ":" + relativePath);
+        if (expiry == null) return false;
+        if (System.currentTimeMillis() > expiry) {
+            suppressedUntil.remove(guid + ":" + relativePath);
+            return false;
+        }
+        return true;
+    }
+
     public void stopWatching(String guid) {
         WatchKey key = guidToKey.remove(guid);
         if (key != null) {
@@ -108,6 +123,11 @@ public class FileWatcherService {
 
                         String relative = watched.basePath().relativize(changed).toString().replace('\\', '/');
                         String action = mapAction(kind);
+
+                        if (isSuppressed(watched.guid(), relative)) {
+                            log.debug("Suppressing sync-originated event: {} {} in guid={}", action, relative, watched.guid());
+                            continue;
+                        }
 
                         log.info("File event: {} {} in guid={}", action, relative, watched.guid());
                         fileSyncService.handleLocalChange(watched.guid(), relative, action, watched.basePath().toString());

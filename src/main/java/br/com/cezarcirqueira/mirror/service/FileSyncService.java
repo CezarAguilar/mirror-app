@@ -8,6 +8,7 @@ import br.com.cezarcirqueira.mirror.websocket.SyncMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.*;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -32,6 +33,7 @@ public class FileSyncService {
     private final MasterWebSocketHandler masterWsHandler;
     private final SlaveWebSocketClient slaveWsClient;
     private final RestTemplate restTemplate;
+    private final FileWatcherService fileWatcherService;
 
     @Value("${server.port:8080}")
     private int serverPort;
@@ -41,13 +43,15 @@ public class FileSyncService {
                            NetworkInfoService networkInfoService,
                            MasterWebSocketHandler masterWsHandler,
                            SlaveWebSocketClient slaveWsClient,
-                           RestTemplate restTemplate) {
+                           RestTemplate restTemplate,
+                           @Lazy FileWatcherService fileWatcherService) {
         this.appStateService = appStateService;
         this.folderRegistryService = folderRegistryService;
         this.networkInfoService = networkInfoService;
         this.masterWsHandler = masterWsHandler;
         this.slaveWsClient = slaveWsClient;
         this.restTemplate = restTemplate;
+        this.fileWatcherService = fileWatcherService;
     }
 
     public void handleLocalChange(String guid, String relativePath, String action, String folderPath) {
@@ -152,6 +156,7 @@ public class FileSyncService {
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 Path target = Paths.get(localFolderPath, relativePath.replace("/", FileSystems.getDefault().getSeparator()));
                 Files.createDirectories(target.getParent());
+                fileWatcherService.suppressFor(guid, relativePath);
                 Files.write(target, response.getBody(), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
                 log.info("Downloaded {} from {} to {}", relativePath, peerIp, target);
             }
