@@ -50,15 +50,22 @@ public class MasterWebSocketHandler extends TextWebSocketHandler {
     public void broadcast(SyncMessage message, WebSocketSession exclude) {
         try {
             String json = objectMapper.writeValueAsString(message);
+            int delivered = 0;
+            int skipped = 0;
             for (WebSocketSession s : sessions) {
                 if (s.isOpen() && (exclude == null || !s.getId().equals(exclude.getId()))) {
                     try {
                         s.sendMessage(new TextMessage(json));
+                        delivered++;
                     } catch (IOException e) {
                         log.warn("Failed to send WS message to session {}: {}", s.getId(), e.getMessage());
                     }
+                } else {
+                    skipped++;
                 }
             }
+            log.info("Broadcast {} {} guid={} -> delivered={} skipped={} totalSessions={}",
+                    message.getAction(), message.getRelativePath(), message.getGuid(), delivered, skipped, sessions.size());
         } catch (Exception e) {
             log.error("Error broadcasting WS message", e);
         }

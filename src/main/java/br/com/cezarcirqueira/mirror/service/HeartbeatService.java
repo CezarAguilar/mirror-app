@@ -1,5 +1,6 @@
 package br.com.cezarcirqueira.mirror.service;
 
+import br.com.cezarcirqueira.mirror.websocket.SlaveWebSocketClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,6 +17,7 @@ public class HeartbeatService {
     private final SlaveRegistryService slaveRegistryService;
     private final NetworkInfoService networkInfoService;
     private final RestTemplate restTemplate;
+    private final SlaveWebSocketClient slaveWsClient;
 
     @Value("${mirror.heartbeat-timeout-seconds:15}")
     private int heartbeatTimeoutSeconds;
@@ -23,11 +25,13 @@ public class HeartbeatService {
     public HeartbeatService(AppStateService appStateService,
                             SlaveRegistryService slaveRegistryService,
                             NetworkInfoService networkInfoService,
-                            RestTemplate restTemplate) {
+                            RestTemplate restTemplate,
+                            SlaveWebSocketClient slaveWsClient) {
         this.appStateService = appStateService;
         this.slaveRegistryService = slaveRegistryService;
         this.networkInfoService = networkInfoService;
         this.restTemplate = restTemplate;
+        this.slaveWsClient = slaveWsClient;
     }
 
     @Scheduled(fixedDelayString = "${mirror.heartbeat-interval-seconds:5}000")
@@ -36,6 +40,7 @@ public class HeartbeatService {
             checkSlavesHeartbeat();
         } else if (appStateService.isSlave()) {
             sendHeartbeatToMaster();
+            ensureWebSocketConnected();
         }
     }
 
@@ -54,6 +59,12 @@ public class HeartbeatService {
         } catch (Exception e) {
             log.warn("Heartbeat to master failed: {}", e.getMessage());
         }
+    }
+
+    private void ensureWebSocketConnected() {
+        var settings = appStateService.getSettings();
+        if (settings.getMasterIp() == null || settings.getMasterPort() == null) return;
+        slaveWsClient.ensureConnected(settings.getMasterIp(), settings.getMasterPort());
     }
 
     public record HeartbeatRequest(String ip) {}

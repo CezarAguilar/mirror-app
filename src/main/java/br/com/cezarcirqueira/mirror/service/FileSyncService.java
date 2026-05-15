@@ -98,17 +98,22 @@ public class FileSyncService {
     public void handleIncomingSlaveMessage(SyncMessage message) {
         String selfIp = networkInfoService.getLocalIpV4();
         if (selfIp.equals(message.getOriginIp())) {
-            log.debug("Echo cancellation: ignoring own message");
+            log.info("Slave echo cancellation: ignoring own message for {}", message.getRelativePath());
             return;
         }
 
         Optional<FolderMapping> mapping = folderRegistryService.findMappingByGuid(message.getGuid());
-        if (mapping.isEmpty() || mapping.get().getLocalPath() == null) {
-            log.debug("No local mapping for guid {}, skipping", message.getGuid());
+        if (mapping.isEmpty()) {
+            log.warn("Slave received WS message for unknown guid {} (path={}), skipping", message.getGuid(), message.getRelativePath());
+            return;
+        }
+        if (mapping.get().getLocalPath() == null) {
+            log.warn("Slave received WS message for guid {} (path={}) but no localPath is configured, skipping", message.getGuid(), message.getRelativePath());
             return;
         }
 
         String localPath = mapping.get().getLocalPath();
+        log.info("Slave applying remote change: action={} path={} guid={} from {}", message.getAction(), message.getRelativePath(), message.getGuid(), message.getOriginIp());
         if ("DELETE".equals(message.getAction())) {
             deleteLocalFile(localPath, message.getRelativePath());
         } else {

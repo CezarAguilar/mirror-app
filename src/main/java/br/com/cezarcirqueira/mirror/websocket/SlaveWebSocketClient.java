@@ -24,6 +24,7 @@ public class SlaveWebSocketClient {
 
     private WebSocket webSocket;
     private final AtomicBoolean connected = new AtomicBoolean(false);
+    private final AtomicBoolean connecting = new AtomicBoolean(false);
     private final StringBuilder messageBuffer = new StringBuilder();
 
     public SlaveWebSocketClient(@Lazy br.com.cezarcirqueira.mirror.service.FileSyncService fileSyncService) {
@@ -31,7 +32,7 @@ public class SlaveWebSocketClient {
     }
 
     public void connect(String masterIp, int masterPort) {
-        if (connected.get()) {
+        if (connected.get() || !connecting.compareAndSet(false, true)) {
             return;
         }
         URI uri = URI.create("ws://" + masterIp + ":" + masterPort + "/ws/sync");
@@ -43,12 +44,21 @@ public class SlaveWebSocketClient {
                 .thenAccept(ws -> {
                     this.webSocket = ws;
                     connected.set(true);
+                    connecting.set(false);
                     log.info("Connected to master WebSocket");
                 })
                 .exceptionally(ex -> {
+                    connecting.set(false);
                     log.warn("Failed to connect to master WebSocket: {}", ex.getMessage());
                     return null;
                 });
+    }
+
+    public void ensureConnected(String masterIp, int masterPort) {
+        if (!connected.get() && !connecting.get()) {
+            log.info("WebSocket not connected, attempting reconnection to {}:{}", masterIp, masterPort);
+            connect(masterIp, masterPort);
+        }
     }
 
     public void disconnect() {
