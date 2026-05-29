@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: mirror-app
+
+  datasource:
+    # Changed from in-memory (mem) to file-based to persist data across restarts
+    url: jdbc:h2:file:./data/mirrordb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: false
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+
+server:
+  port: 8080
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+    try-it-out-enabled: true
+  show-actuator: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+logging:
+  level:
+    root: INFO
+    br.com.cezarcirqueira.mirror.app: DEBUG
+    org.hibernate.SQL: DEBUG
