@@ -1,4 +1,4 @@
-package br.com.cezarcirqueira.mirror.app.websocket;
+package br.com.cezarcirqueira.mirror.app.model;
 
 import org.springframework.web.socket.WebSocketSession;
 

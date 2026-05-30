@@ -1,6 +1,10 @@
 package br.com.cezarcirqueira.mirror.app.websocket;
 
+import br.com.cezarcirqueira.mirror.app.model.WebSocketQueue;
+import br.com.cezarcirqueira.mirror.app.model.dto.WebSocketMessagePayload;
+import br.com.cezarcirqueira.mirror.app.services.WebSocketService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -13,14 +17,11 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Component
+@RequiredArgsConstructor
 public class WebSocketHandler extends TextWebSocketHandler {
 
     private final WebSocketService webSocketService;
     private final ObjectMapper objectMapper = new ObjectMapper();
-
-    public WebSocketHandler(WebSocketService webSocketService) {
-        this.webSocketService = webSocketService;
-    }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -65,12 +66,13 @@ public class WebSocketHandler extends TextWebSocketHandler {
             queue.getPendingAcks().put(messageId, targets.keySet().stream()
                     .collect(Collectors.toMap(id -> id, id -> false)));
 
-            WebSocketMessagePayload newPayload = new WebSocketMessagePayload();
-            newPayload.setType("NEW_MESSAGE");
-            newPayload.setMessageId(messageId);
-            newPayload.setQueue(queue.getName());
-            newPayload.setPayload(payload.getPayload());
-            
+            WebSocketMessagePayload newPayload = WebSocketMessagePayload.builder()
+                    .type("NEW_MESSAGE")
+                    .messageId(messageId)
+                    .queue(queue.getName())
+                    .payload(payload.getPayload())
+                    .build();
+
             TextMessage textMessage = new TextMessage(objectMapper.writeValueAsString(newPayload));
             for (WebSocketSession targetSession : targets.values()) {
                 if (targetSession != null && targetSession.isOpen()) {

@@ -1,5 +1,7 @@
-package br.com.cezarcirqueira.mirror.app.websocket;
+package br.com.cezarcirqueira.mirror.app.resources;
 
+import br.com.cezarcirqueira.mirror.app.services.WebSocketService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -11,38 +13,35 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/websocket")
-public class WebSocketController {
+@RequiredArgsConstructor
+public class WebSocketResource {
 
-    private final WebSocketService webSocketService;
-
-    public WebSocketController(WebSocketService webSocketService) {
-        this.webSocketService = webSocketService;
-    }
+    private final WebSocketService service;
 
     @PostMapping("/start")
     public ResponseEntity<Void> start() {
-        return webSocketService.start() ? ResponseEntity.ok().build() : ResponseEntity.badRequest().build();
+        return service.start() ? ResponseEntity.ok().build() : ResponseEntity.badRequest().build();
     }
 
     @PostMapping("/stop")
     public ResponseEntity<Void> stop() {
-        webSocketService.stop();
+        service.stop();
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> getStatus() {
         return ResponseEntity.ok(Map.of(
-                "status", webSocketService.getStatus(),
-                "uptime_seconds", webSocketService.getUptimeSeconds()
+                "status", service.getStatus(),
+                "uptime_seconds", service.getUptimeSeconds()
         ));
     }
 
     @GetMapping("/clients")
     public ResponseEntity<Map<String, Object>> getClients() {
-        if (!webSocketService.isRunning()) {
+        if (!service.isRunning()) {
             return ResponseEntity.ok(Collections.singletonMap("error", "Service is not running"));
         }
-        return ResponseEntity.ok(Map.of("queues", webSocketService.getClients()));
+        return ResponseEntity.ok(Map.of("queues", service.getClients()));
     }
 }
