@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mirror</title>
+    <link rel="icon" type="image/svg+xml" href="img/mirror-app.svg">
+    <link href="https://cdn.jsdelivr.net/npm/halfmoon@2.0.2/css/halfmoon.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="css/app.css" rel="stylesheet">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg border-bottom bg-body">
+    <div class="container-fluid">
+        <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+            <img src="img/mirror-app.svg" alt="Mirror logo" width="32" height="32">
+            <span class="fw-bold">MIRROR</span>
+        </a>
+
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#main-navbar"
+                aria-controls="main-navbar" aria-expanded="false" aria-label="Alternar navegação">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="main-navbar">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link active" data-view="folders" href="#folders">Pastas</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-view="mouse" href="#mouse">Mouse</a>
+                </li>
+            </ul>
+
+            <div class="dropdown">
+                <button id="server-toggle"
+                        type="button"
+                        class="btn btn-icon"
+                        data-bs-toggle="dropdown"
+                        data-bs-auto-close="outside"
+                        aria-expanded="false"
+                        title="Conexão com servidor">
+                    <i id="server-icon" class="bi bi-pc-display-horizontal server-icon-disconnected"></i>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end p-3 server-menu" aria-labelledby="server-toggle">
+                    <div class="mb-2 d-flex justify-content-between gap-2">
+                        <span class="text-muted small">Endereço local:</span>
+                        <strong id="local-address" class="small">--</strong>
+                    </div>
+                    <hr class="my-2">
+
+                    <div class="d-flex gap-3 mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="connection-mode"
+                                   id="mode-local" value="LOCAL" checked>
+                            <label class="form-check-label" for="mode-local">Local</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="connection-mode"
+                                   id="mode-remote" value="REMOTE">
+                            <label class="form-check-label" for="mode-remote">Remoto</label>
+                        </div>
+                    </div>
+
+                    <label for="server-address-input" class="form-label small mb-1">Servidor:</label>
+                    <div class="input-group input-group-sm mb-2">
+                        <input type="text" class="form-control" id="server-address-input"
+                               placeholder="ip do servidor" autocomplete="off">
+                        <button class="btn btn-primary" id="connect-button" type="button">Conectar</button>
+                    </div>
+
+                    <div class="small">
+                        Status: <span id="connection-status" class="fw-semibold">Offline</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<main class="container-fluid py-3">
+    <section id="view-folders" class="view">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h5 card-title">Pastas</h2>
+                <p class="text-muted mb-0">Em construção.</p>
+            </div>
+        </div>
+    </section>
+
+    <section id="view-mouse" class="view d-none">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="h5 card-title">Mouse</h2>
+                <p class="text-muted mb-0">Em construção.</p>
+            </div>
+        </div>
+    </section>
+</main>
+
+<div id="toast-area" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

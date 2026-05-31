@@ -1,0 +1,59 @@
+:root {
+    --server-icon-disconnected: #6c757d;
+    --server-icon-connected: #198754;
+}
+
+body {
+    min-height: 100vh;
+}
+
+.btn-icon {
+    background-color: transparent;
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    padding: 0.35rem 0.55rem;
+    font-size: 1.25rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon:hover {
+    background-color: var(--bs-tertiary-bg);
+}
+
+#server-icon {
+    transition: color 0.15s ease-in-out;
+}
+
+.server-icon-disconnected {
+    color: var(--server-icon-disconnected);
+}
+
+.server-icon-connected {
+    color: var(--server-icon-connected);
+}
+
+.server-menu {
+    min-width: 280px;
+}
+
+.server-menu hr {
+    border-color: var(--bs-border-color);
+    opacity: 0.5;
+}
+
+.server-menu .form-check-input:disabled,
+.server-menu .form-control:disabled {
+    cursor: not-allowed;
+}
+
+.view {
+    animation: fade-in 0.15s ease-in-out;
+}
+
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
+}
