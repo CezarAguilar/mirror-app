@@ -38,4 +38,31 @@ public interface CryptoService {
      * {@code output}, leaving its closure to the caller.</p>
      */
     void encryptStream(InputStream input, OutputStream output, SecretKey sessionKey) throws IOException;
+
+    /**
+     * Generates a fresh random AES-256 key suitable for use as an envelope
+     * session key.
+     */
+    SecretKey generateSessionKey();
+
+    /**
+     * Wraps {@code sessionKey} with the server's RSA public key using
+     * {@code RSA/ECB/OAEPWithSHA-256AndMGF1Padding} and returns the resulting
+     * ciphertext Base64-encoded. Counterpart of {@link #unwrapSessionKey(String)}.
+     */
+    String wrapSessionKey(SecretKey sessionKey);
+
+    /**
+     * Encrypts {@code plaintext} with {@code AES/GCM/NoPadding} using
+     * {@code sessionKey} and returns Base64 of {@code IV(12) || ciphertext || tag(16)}.
+     * Counterpart of {@link #decryptToString(String, SecretKey)}.
+     */
+    String encryptToBase64(String plaintext, SecretKey sessionKey);
+
+    /**
+     * Reads ciphertext from {@code input} in the {@code IV(12) || ciphertext || tag}
+     * layout and writes the decrypted bytes to {@code output} on-the-fly.
+     * Counterpart of {@link #encryptStream(InputStream, OutputStream, SecretKey)}.
+     */
+    void decryptStream(InputStream input, OutputStream output, SecretKey sessionKey) throws IOException;
 }

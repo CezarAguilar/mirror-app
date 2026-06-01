@@ -165,6 +165,76 @@ public class CryptoServiceImpl implements CryptoService {
         }
     }
 
+    @Override
+    public SecretKey generateSessionKey() {
+        byte[] keyBytes = new byte[AES_KEY_SIZE_BYTES];
+        secureRandom.nextBytes(keyBytes);
+        return new SecretKeySpec(keyBytes, AES_ALGORITHM);
+    }
+
+    @Override
+    public String wrapSessionKey(SecretKey sessionKey) {
+        try {
+            Cipher cipher = Cipher.getInstance(RSA_TRANSFORMATION);
+            cipher.init(Cipher.ENCRYPT_MODE, serverKeyPair.getPublic());
+            byte[] wrapped = cipher.doFinal(sessionKey.getEncoded());
+            return Base64.getEncoder().encodeToString(wrapped);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Failed to wrap session key: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public String encryptToBase64(String plaintext, SecretKey sessionKey) {
+        if (plaintext == null) {
+            throw new IllegalArgumentException("Plaintext is required");
+        }
+        try {
+            byte[] iv = new byte[GCM_IV_LENGTH_BYTES];
+            secureRandom.nextBytes(iv);
+
+            Cipher cipher = Cipher.getInstance(AES_TRANSFORMATION);
+            cipher.init(Cipher.ENCRYPT_MODE, sessionKey, new GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv));
+            byte[] cipherText = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+
+            byte[] combined = new byte[iv.length + cipherText.length];
+            System.arraycopy(iv, 0, combined, 0, iv.length);
+            System.arraycopy(cipherText, 0, combined, iv.length, cipherText.length);
+            return Base64.getEncoder().encodeToString(combined);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("Failed to encrypt payload: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void decryptStream(InputStream input, OutputStream output, SecretKey sessionKey) throws IOException {
+        try {
+            byte[] iv = input.readNBytes(GCM_IV_LENGTH_BYTES);
+            if (iv.length != GCM_IV_LENGTH_BYTES) {
+                throw new IOException("Stream ended before IV could be read");
+            }
+
+            Cipher cipher = Cipher.getInstance(AES_TRANSFORMATION);
+            cipher.init(Cipher.DECRYPT_MODE, sessionKey, new GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv));
+
+            byte[] buffer = new byte[STREAM_BUFFER_SIZE];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                byte[] chunk = cipher.update(buffer, 0, read);
+                if (chunk != null && chunk.length > 0) {
+                    output.write(chunk);
+                }
+            }
+            byte[] tail = cipher.doFinal();
+            if (tail != null && tail.length > 0) {
+                output.write(tail);
+            }
+            output.flush();
+        } catch (GeneralSecurityException e) {
+            throw new IOException("Failed to decrypt stream: " + e.getMessage(), e);
+        }
+    }
+
     private KeyPair generateEphemeralKeyPair() throws GeneralSecurityException {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(RSA_KEY_SIZE_BITS, secureRandom);

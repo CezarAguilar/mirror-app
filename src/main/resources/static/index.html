@@ -80,25 +80,104 @@
 
 <main class="container-fluid py-3">
     <section id="view-folders" class="view">
-        <div class="card">
-            <div class="card-body">
-                <h2 class="h5 card-title">Pastas</h2>
-                <p class="text-muted mb-0">Em construção.</p>
+        <div class="row justify-content-center">
+            <div class="col-12 col-lg-10 col-xl-9 col-xxl-8">
+                <div class="card mb-3">
+                    <div class="card-header">Nova Pasta</div>
+                    <div class="card-body">
+                        <form id="folder-form" autocomplete="off" novalidate>
+                            <div class="row g-2 mb-3 align-items-center">
+                                <label for="folder-guid" class="col-sm-3 col-form-label col-form-label-sm">Guid</label>
+                                <div class="col-sm-9">
+                                    <input type="text" id="folder-guid"
+                                           class="form-control form-control-sm font-monospace"
+                                           readonly>
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-3 align-items-center">
+                                <label for="folder-path" class="col-sm-3 col-form-label col-form-label-sm">Endereço da pasta</label>
+                                <div class="col-sm-9">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" id="folder-path" class="form-control"
+                                               placeholder="ex.: C:/caminho/da/pasta">
+                                        <button type="button" class="btn btn-outline-secondary" id="folder-browse">Procurar</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="d-flex justify-content-end gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="folder-clear">Limpar</button>
+                                <button type="submit" class="btn btn-sm btn-primary" id="folder-save">Salvar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">Listagem</div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle mb-0">
+                                <thead>
+                                <tr>
+                                    <th scope="col">Guid</th>
+                                    <th scope="col">Endereço</th>
+                                    <th scope="col" class="text-end" style="width: 1%; white-space: nowrap;">Ação</th>
+                                </tr>
+                                </thead>
+                                <tbody id="folders-table-body"></tbody>
+                            </table>
+                        </div>
+                        <p id="folders-empty" class="text-muted small mt-3 mb-0 d-none">Nenhuma pasta cadastrada.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
     <section id="view-mouse" class="view d-none">
-        <div class="card">
-            <div class="card-body">
-                <h2 class="h5 card-title">Mouse</h2>
-                <p class="text-muted mb-0">Em construção.</p>
+        <div class="row justify-content-center">
+            <div class="col-12 col-lg-10 col-xl-9 col-xxl-8">
+                <div class="card">
+                    <div class="card-body">
+                        <h2 class="h5 card-title">Mouse</h2>
+                        <p class="text-muted mb-0">Em construção.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 </main>
 
 <div id="toast-area" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+<div class="modal fade" id="folder-picker-modal" tabindex="-1" aria-hidden="true" aria-labelledby="folder-picker-title">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="folder-picker-title">Selecionar pasta</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="folder-picker-up" title="Voltar">
+                        <i class="bi bi-arrow-up"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="folder-picker-roots" title="Raízes do sistema">
+                        <i class="bi bi-hdd-stack"></i>
+                    </button>
+                    <code id="folder-picker-current" class="text-truncate flex-grow-1 p-2 bg-body-secondary rounded small">/</code>
+                </div>
+                <ul id="folder-picker-list" class="list-group small folder-picker-list mb-0"></ul>
+                <p id="folder-picker-empty" class="text-muted small mt-2 mb-0 d-none">Nenhuma subpasta visível.</p>
+                <p id="folder-picker-error" class="text-danger small mt-2 mb-0 d-none"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="folder-picker-confirm" disabled>Selecionar esta pasta</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="js/app.js"></script>

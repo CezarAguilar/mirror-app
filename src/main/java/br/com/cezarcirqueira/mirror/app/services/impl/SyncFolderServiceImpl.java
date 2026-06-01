@@ -7,9 +7,13 @@ import br.com.cezarcirqueira.mirror.app.model.dto.SyncFolderResponse;
 import br.com.cezarcirqueira.mirror.app.repositories.SyncFolderRepository;
 import br.com.cezarcirqueira.mirror.app.services.FolderWatcherService;
 import br.com.cezarcirqueira.mirror.app.services.SyncFolderService;
+import br.com.cezarcirqueira.mirror.app.util.PathUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -24,11 +28,12 @@ public class SyncFolderServiceImpl implements SyncFolderService {
     @Override
     @Transactional
     public SyncFolderResponse create(SyncFolderRequest request) {
+        String canonicalPath = normalizeAndValidateBasePath(request.getBasePath());
         SyncFolder entity = SyncFolder.builder()
                 .guid(request.getGuid())
-                .basePath(request.getBasePath())
+                .basePath(canonicalPath)
                 .build();
-        
+
         entity = repository.save(entity);
         folderWatcherService.registerFolder(entity);
         return mapToResponse(entity);
@@ -62,9 +67,9 @@ public class SyncFolderServiceImpl implements SyncFolderService {
             entity.setGuid(request.getGuid());
         }
         if (request.getBasePath() != null) {
-            entity.setBasePath(request.getBasePath());
+            entity.setBasePath(normalizeAndValidateBasePath(request.getBasePath()));
         }
-        
+
         entity = repository.save(entity);
         folderWatcherService.registerFolder(entity);
         return mapToResponse(entity);
@@ -86,5 +91,20 @@ public class SyncFolderServiceImpl implements SyncFolderService {
                 .creationDate(entity.getCreationDate())
                 .basePath(entity.getBasePath())
                 .build();
+    }
+
+    private static String normalizeAndValidateBasePath(String input) {
+        if (input == null || input.isBlank()) {
+            throw new IllegalArgumentException("basePath is required");
+        }
+        Path resolved = PathUtils.resolve(input);
+        String canonical = PathUtils.toCanonical(resolved);
+        if (!Files.exists(resolved)) {
+            throw new ResourceNotFoundException("basePath does not exist: " + canonical);
+        }
+        if (!Files.isDirectory(resolved)) {
+            throw new IllegalArgumentException("basePath is not a directory: " + canonical);
+        }
+        return canonical;
     }
 }

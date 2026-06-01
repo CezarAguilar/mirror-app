@@ -9,6 +9,7 @@ import br.com.cezarcirqueira.mirror.app.services.AuditService;
 import br.com.cezarcirqueira.mirror.app.services.CryptoService;
 import br.com.cezarcirqueira.mirror.app.services.ReplayProtectionService;
 import br.com.cezarcirqueira.mirror.app.services.SyncFolderService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.crypto.SecretKey;
@@ -31,10 +33,15 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -47,6 +54,7 @@ public class SyncFolderResource {
     private final CryptoService cryptoService;
     private final ReplayProtectionService replayProtectionService;
     private final AuditService auditService;
+    private final ObjectMapper objectMapper;
 
     @PostMapping
     public ResponseEntity<SyncFolderResponse> create(@RequestBody SyncFolderRequest request) {
@@ -140,5 +148,80 @@ public class SyncFolderResource {
         if (ex instanceof SecurityException) return "path_traversal_or_security";
         if (ex instanceof IllegalArgumentException) return "invalid_input";
         return "internal_error";
+    }
+
+    // ------------------------------------------------------------------
+    // TEMPORARY: helper endpoint that simulates the encrypted-client side
+    // entirely on the server, so the real /download endpoint can be exercised
+    // with a plain `curl -G --data-urlencode "path=..."`. Remove once a proper
+    // client exists.
+    // ------------------------------------------------------------------
+    @GetMapping("/{guid}/download-test")
+    public void downloadTest(@PathVariable UUID guid,
+                             @RequestParam("path") String relativePath,
+                             HttpServletRequest request,
+                             HttpServletResponse response) throws IOException {
+
+        SecretKey sessionKey = cryptoService.generateSessionKey();
+        String encryptedSessionKey = cryptoService.wrapSessionKey(sessionKey);
+
+        EncryptedTargetPayload targetPayload = EncryptedTargetPayload.builder()
+                .path(relativePath)
+                .nonce(UUID.randomUUID().toString())
+                .timestamp(Instant.now())
+                .build();
+        String targetJson = objectMapper.writeValueAsString(targetPayload);
+        String encryptedTarget = cryptoService.encryptToBase64(targetJson, sessionKey);
+
+        URI uri = URI.create(String.format("%s://127.0.0.1:%d/sync-folders/%s/download",
+                request.getScheme(), request.getServerPort(), guid));
+
+        HttpRequest httpRequest = HttpRequest.newBuilder()
+                .uri(uri)
+                .header("X-Encrypted-Session-Key", encryptedSessionKey)
+                .header("X-Target-Encrypted", encryptedTarget)
+                .header("X-Forwarded-For", request.getRemoteAddr())
+                .GET()
+                .build();
+
+        HttpResponse<InputStream> upstream;
+        try {
+            upstream = HttpClient.newHttpClient().send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("download-test self-call interrupted", e);
+        }
+
+        if (upstream.statusCode() >= 400) {
+            response.setStatus(upstream.statusCode());
+            response.setContentType(upstream.headers()
+                    .firstValue(HttpHeaders.CONTENT_TYPE)
+                    .orElse(MediaType.APPLICATION_JSON_VALUE));
+            try (InputStream errBody = upstream.body();
+                 OutputStream out = response.getOutputStream()) {
+                errBody.transferTo(out);
+            }
+            return;
+        }
+
+        String filename = extractFilename(relativePath);
+        response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+        response.setHeader(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"");
+        response.setHeader(HttpHeaders.CACHE_CONTROL, "no-store");
+
+        try (InputStream cipherStream = upstream.body();
+             OutputStream out = response.getOutputStream()) {
+            cryptoService.decryptStream(cipherStream, out, sessionKey);
+        }
+    }
+
+    private static String extractFilename(String relativePath) {
+        if (relativePath == null || relativePath.isBlank()) {
+            return "download.bin";
+        }
+        String trimmed = relativePath.replace('\\', '/');
+        int idx = trimmed.lastIndexOf('/');
+        String tail = idx >= 0 ? trimmed.substring(idx + 1) : trimmed;
+        return tail.isBlank() ? "download.bin" : tail;
     }
 }
