@@ -1,5 +1,6 @@
 package br.com.cezarcirqueira.mirror.app.services.impl;
 
+import br.com.cezarcirqueira.mirror.app.exceptions.ResourceNotFoundException;
 import br.com.cezarcirqueira.mirror.app.model.SyncFolder;
 import br.com.cezarcirqueira.mirror.app.model.dto.SyncFolderRequest;
 import br.com.cezarcirqueira.mirror.app.model.dto.SyncFolderResponse;
@@ -37,7 +38,7 @@ public class SyncFolderServiceImpl implements SyncFolderService {
     @Transactional(readOnly = true)
     public SyncFolderResponse findByGuid(UUID guid) {
         SyncFolder entity = repository.findByGuid(guid)
-                .orElseThrow(() -> new RuntimeException("SyncFolder not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("SyncFolder not found: " + guid));
         return mapToResponse(entity);
     }
 
@@ -53,7 +54,7 @@ public class SyncFolderServiceImpl implements SyncFolderService {
     @Transactional
     public SyncFolderResponse update(UUID guid, SyncFolderRequest request) {
         SyncFolder entity = repository.findByGuid(guid)
-                .orElseThrow(() -> new RuntimeException("SyncFolder not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("SyncFolder not found: " + guid));
         
         folderWatcherService.unregisterFolder(guid);
         
@@ -73,7 +74,7 @@ public class SyncFolderServiceImpl implements SyncFolderService {
     @Transactional
     public void delete(UUID guid) {
         if (!repository.existsByGuid(guid)) {
-            throw new RuntimeException("SyncFolder not found");
+            throw new ResourceNotFoundException("SyncFolder not found: " + guid);
         }
         repository.deleteByGuid(guid);
         folderWatcherService.unregisterFolder(guid);

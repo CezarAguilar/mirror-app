@@ -47,6 +47,17 @@ management:
     health:
       show-details: when-authorized
 
+mirror-app:
+  crypto:
+    # When keystore-path is blank, an ephemeral RSA-3072 key pair is generated on startup (dev only).
+    # Production example:
+    #   keystore-path: file:./data/mirror-keystore.p12
+    keystore-path:
+    keystore-type: PKCS12
+    keystore-password: changeit
+    key-alias: mirror-app
+    key-password: changeit
+
 logging:
   level:
     root: INFO
