@@ -58,6 +58,20 @@ mirror-app:
     key-alias: mirror-app
     key-password: changeit
 
+  cors:
+    # Permissive defaults for LAN/dev. In production, restrict this list to known
+    # origins, e.g. ["http://app.example.com", "https://*.example.com"].
+    allowed-origin-patterns:
+      - "*"
+    allowed-methods:
+      - "*"
+    allowed-headers:
+      - "*"
+    exposed-headers:
+      - Content-Disposition
+    allow-credentials: false
+    max-age: 3600
+
 logging:
   level:
     root: INFO
