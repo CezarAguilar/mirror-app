@@ -93,8 +93,6 @@
         elements.folderPickerConfirm = document.getElementById('folder-picker-confirm');
     }
 
-    // ---------- Connection / server menu ----------
-
     function render() {
         elements.localAddress.textContent = state.localAddress || '--';
 
@@ -215,9 +213,30 @@
     }
 
     function handleRemoteAddressInput(event) {
-        if (state.mode === ConnectionMode.REMOTE && !state.connected) {
-            state.remoteAddressDraft = event.target.value;
+        if (state.mode !== ConnectionMode.REMOTE || state.connected) return;
+
+        const target = event.target;
+        const before = target.value;
+        const after = maskIPv4(before);
+
+        if (after !== before) {
+            const wasAtEnd = target.selectionStart === before.length;
+            target.value = after;
+            if (wasAtEnd) {
+                target.setSelectionRange(after.length, after.length);
+            }
         }
+        state.remoteAddressDraft = after;
+    }
+
+    function maskIPv4(value) {
+        if (typeof value !== 'string') return '';
+        const cleaned = value.replace(/[^\d.]/g, '').replace(/\.{2,}/g, '.');
+        return cleaned
+            .split('.')
+            .slice(0, 4)
+            .map(block => block.substring(0, 3))
+            .join('.');
     }
 
     function handleNavClick(event) {
@@ -226,8 +245,6 @@
         elements.navLinks.forEach(link => link.classList.toggle('active', link.dataset.view === targetView));
         elements.views.forEach(view => view.classList.toggle('d-none', view.id !== `view-${targetView}`));
     }
-
-    // ---------- Folders CRUD ----------
 
     function generateUuid() {
         if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -334,8 +351,6 @@
         }
     }
 
-    // ---------- Folder picker modal ----------
-
     function openFolderPicker() {
         if (!folderPickerModal) {
             folderPickerModal = new bootstrap.Modal(elements.folderPickerModal);
@@ -359,11 +374,8 @@
             elements.folderPickerError.textContent = error.message || 'Não foi possível listar essa pasta';
             elements.folderPickerError.classList.remove('d-none');
             state.folderPicker.entries = [];
-            if (path) {
-                // Try to recover by listing the parent (or roots if at top)
-                if (state.folderPicker.currentPath === null) {
-                    state.folderPicker.entries = [];
-                }
+            if (path && state.folderPicker.currentPath === null) {
+                state.folderPicker.entries = [];
             }
         } finally {
             state.folderPicker.loading = false;
@@ -433,8 +445,6 @@
         state.newFolder.basePath = state.folderPicker.currentPath;
         folderPickerModal.hide();
     }
-
-    // ---------- Init ----------
 
     async function init() {
         cacheElements();

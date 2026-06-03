@@ -7,11 +7,6 @@ import lombok.NoArgsConstructor;
 
 import java.time.Instant;
 
-/**
- * Structured payload expected once the {@code X-Target-Encrypted} header is
- * decrypted. Carries the requested relative path plus the freshness signals
- * consumed by {@code ReplayProtectionService}.
- */
 @Data
 @Builder
 @NoArgsConstructor

@@ -6,14 +6,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 
-/**
- * Cross-Origin Resource Sharing settings applied to every REST endpoint.
- *
- * <p>Defaults are intentionally permissive to ease LAN/dev usage. In
- * production, restrict {@link #allowedOriginPatterns} to the known clients
- * and consider flipping {@link #allowCredentials} only if cookies/session
- * are involved.</p>
- */
 @Data
 @Component
 @ConfigurationProperties(prefix = "mirror-app.cors")

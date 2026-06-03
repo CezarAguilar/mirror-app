@@ -13,12 +13,9 @@ import java.util.List;
 @AllArgsConstructor
 public class FilesystemBrowserResponse {
 
-    /** Absolute path of the directory being listed, or {@code null} when listing filesystem roots. */
     private String currentPath;
 
-    /** Parent path, or {@code null} when {@code currentPath} is a root / when listing roots. */
     private String parentPath;
 
-    /** Sub-directory entries available inside {@code currentPath}. */
     private List<FilesystemEntry> entries;
 }

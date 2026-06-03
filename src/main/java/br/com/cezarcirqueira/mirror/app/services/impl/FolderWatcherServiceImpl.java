@@ -42,14 +42,11 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
     private final Map<UUID, WatchService> watchServices = new ConcurrentHashMap<>();
     private final ExecutorService executorService = Executors.newCachedThreadPool();
     private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
-    
-    // Usado para evitar o Lock do Windows em sub-pastas
+
     private WatchEvent.Modifier fileTreeModifier;
 
     @PostConstruct
     public void init() {
-        // Tenta carregar o modificador especifico do Windows/JDK que permite monitorar
-        // uma arvore de diretorios inteira bloqueando APENAS a pasta raiz.
         try {
             Class<?> modifierClass = Class.forName("com.sun.nio.file.ExtendedWatchEventModifier");
             fileTreeModifier = (WatchEvent.Modifier) modifierClass.getField("FILE_TREE").get(null);
@@ -120,11 +117,9 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
         };
 
         if (fileTreeModifier != null) {
-            // No Windows com JDK Sun/Oracle, isso registra toda a arvore sem criar lock nas sub-pastas
             WatchKey key = start.register(watchService, events, fileTreeModifier);
             keys.put(key, start);
         } else {
-            // Fallback para SOs Unix-like que não sofrem do problema de lock
             Files.walkFileTree(start, new SimpleFileVisitor<Path>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
@@ -154,7 +149,7 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
 
                 for (WatchEvent<?> event : key.pollEvents()) {
                     WatchEvent.Kind<?> kind = event.kind();
-                    
+
                     if (kind == StandardWatchEventKinds.OVERFLOW) {
                         continue;
                     }
@@ -162,12 +157,11 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
                     WatchEvent<Path> ev = cast(event);
                     Path name = ev.context();
                     Path child = dir.resolve(name);
-                    
+
                     try {
                         if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
                             if (Files.isDirectory(child)) {
                                 if (fileTreeModifier == null) {
-                                    // Se NÃO estamos usando o FILE_TREE, precisamos registrar manualmente
                                     registerDirectory(child, watchService, keys);
                                 }
                                 processEvent(guid, basePath, child, "CREATED");

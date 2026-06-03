@@ -5,11 +5,6 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-/**
- * Wires the CORS policy described by {@link CorsProperties} into every MVC
- * endpoint. WebSocket handlers configure their own allowed origins in
- * {@link WebSocketConfig}.
- */
 @Configuration
 @RequiredArgsConstructor
 public class WebConfig implements WebMvcConfigurer {

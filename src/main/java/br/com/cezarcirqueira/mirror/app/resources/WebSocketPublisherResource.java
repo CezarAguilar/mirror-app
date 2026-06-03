@@ -11,10 +11,6 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/**
- * TEMPORARY: Test-only endpoint used to publish arbitrary payloads to a WebSocket queue.
- * Will be removed once the production producers are in place.
- */
 @RestController
 @RequestMapping("/api/websocket-publisher")
 @RequiredArgsConstructor
