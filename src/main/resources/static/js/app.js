@@ -43,6 +43,8 @@
         return payload;
     }
 
+    const STATUS_POLL_INTERVAL_MS = 3000;
+
     const state = {
         localAddress: null,
         mode: ConnectionMode.LOCAL,
@@ -61,6 +63,8 @@
 
     const elements = {};
     let folderPickerModal = null;
+    let statusPollTimer = null;
+    let initialStatusLoaded = false;
 
     function cacheElements() {
         elements.serverIcon = document.getElementById('server-icon');
@@ -152,6 +156,7 @@
     }
 
     async function loadConsumerStatus() {
+        const previousConnected = state.connected;
         try {
             const status = await api.getConsumerStatus();
             state.connected = !!status.connected;
@@ -159,9 +164,32 @@
                 state.mode = status.mode;
             }
             state.serverAddress = status.serverAddress || null;
+            return { previousConnected, currentConnected: state.connected, ok: true };
         } catch (error) {
             console.error('Failed to load consumer status', error);
+            state.connected = false;
+            state.serverAddress = null;
+            return { previousConnected, currentConnected: false, ok: false };
         }
+    }
+
+    async function pollConsumerStatus() {
+        const { previousConnected, currentConnected, ok } = await loadConsumerStatus();
+        if (initialStatusLoaded && previousConnected && !currentConnected) {
+            const message = ok
+                ? 'Conexão com o servidor foi perdida'
+                : 'Não foi possível verificar o status do servidor';
+            showToast(message, 'warning');
+        }
+        if (previousConnected !== currentConnected) {
+            render();
+        }
+        initialStatusLoaded = true;
+    }
+
+    function startStatusPolling() {
+        if (statusPollTimer !== null) return;
+        statusPollTimer = window.setInterval(pollConsumerStatus, STATUS_POLL_INTERVAL_MS);
     }
 
     async function handleConnectClick() {
@@ -467,8 +495,10 @@
 
         resetFolderForm();
         await Promise.all([loadLocalAddress(), loadConsumerStatus(), loadFolders()]);
+        initialStatusLoaded = true;
         render();
         renderFolders();
+        startStatusPolling();
     }
 
     document.addEventListener('DOMContentLoaded', init);
