@@ -5,7 +5,7 @@ import br.com.cezarcirqueira.mirror.app.model.dto.sync.FileSyncEventType;
 import br.com.cezarcirqueira.mirror.app.model.dto.sync.FileSyncMessage;
 import br.com.cezarcirqueira.mirror.app.repositories.SyncFolderRepository;
 import br.com.cezarcirqueira.mirror.app.services.FolderWatcherService;
-import br.com.cezarcirqueira.mirror.app.services.WebSocketService;
+import br.com.cezarcirqueira.mirror.app.sync.OutboundDispatcher;
 import br.com.cezarcirqueira.mirror.app.sync.SyncConstants;
 import br.com.cezarcirqueira.mirror.app.util.HashUtils;
 import jakarta.annotation.PostConstruct;
@@ -43,7 +43,7 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
     private static final String FILE_SYNC_QUEUE = "fileSync";
 
     private final SyncFolderRepository repository;
-    private final WebSocketService webSocketService;
+    private final OutboundDispatcher outboundDispatcher;
     private final Map<UUID, WatchService> watchServices = new ConcurrentHashMap<>();
     private final ExecutorService executorService = Executors.newCachedThreadPool();
 
@@ -218,11 +218,6 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
 
         log.info("sync-event guid={} path={} hash={} type={}", guid, relativePath, hash, eventType);
 
-        if (!webSocketService.isRunning()) {
-            log.debug("sync-event guid={} path={} type={} skipped=websocket-stopped", guid, relativePath, eventType);
-            return;
-        }
-
         FileSyncMessage message = FileSyncMessage.builder()
                 .folderGuid(guid)
                 .path(relativePath)
@@ -231,7 +226,11 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
                 .build();
 
         try {
-            webSocketService.publish(FILE_SYNC_QUEUE, null, message);
+            boolean dispatched = outboundDispatcher.publish(FILE_SYNC_QUEUE, null, message);
+            if (!dispatched) {
+                log.debug("sync-event guid={} path={} type={} not-published=no-transport",
+                        guid, relativePath, eventType);
+            }
         } catch (RuntimeException ex) {
             log.warn("Failed to publish sync-event guid={} path={} type={}: {}",
                     guid, relativePath, eventType, ex.getMessage());

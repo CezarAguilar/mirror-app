@@ -3,6 +3,7 @@ package br.com.cezarcirqueira.mirror.app.services.impl;
 import br.com.cezarcirqueira.mirror.app.model.ConnectionMode;
 import br.com.cezarcirqueira.mirror.app.model.SyncFolder;
 import br.com.cezarcirqueira.mirror.app.model.dto.ConsumerStatusResponse;
+import br.com.cezarcirqueira.mirror.app.model.dto.GenericMessageApi;
 import br.com.cezarcirqueira.mirror.app.model.dto.WebSocketMessagePayload;
 import br.com.cezarcirqueira.mirror.app.model.dto.sync.FileSyncMessage;
 import br.com.cezarcirqueira.mirror.app.repositories.SyncFolderRepository;
@@ -11,6 +12,8 @@ import br.com.cezarcirqueira.mirror.app.sync.InstanceIdentityService;
 import br.com.cezarcirqueira.mirror.app.sync.PeerDownloadClient;
 import br.com.cezarcirqueira.mirror.app.sync.SyncConstants;
 import br.com.cezarcirqueira.mirror.app.util.HashUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -135,6 +138,38 @@ public class WebSocketConsumerServiceImpl implements WebSocketConsumerService {
                 .serverAddress(currentServerAddress.get())
                 .subscribedQueues(isConnected ? List.copyOf(sessions.keySet()) : List.of())
                 .build();
+    }
+
+    @Override
+    public boolean publish(String queueName, String destinationId, GenericMessageApi payload) {
+        if (queueName == null || queueName.isBlank()) {
+            throw new IllegalArgumentException("Queue name is required");
+        }
+        WebSocketSession session = sessions.get(queueName);
+        if (session == null || !session.isOpen()) {
+            log.debug("[Consumer] publish skipped: no open session for queue '{}'", queueName);
+            return false;
+        }
+
+        JsonNode payloadNode = payload == null ? null : objectMapper.valueToTree(payload);
+        WebSocketMessagePayload envelope = WebSocketMessagePayload.builder()
+                .type("NEW_MESSAGE")
+                .queue(queueName)
+                .senderId(instanceIdentityService.getInstanceId())
+                .destinationId(destinationId)
+                .payload(payloadNode)
+                .build();
+
+        try {
+            String json = objectMapper.writeValueAsString(envelope);
+            session.sendMessage(new TextMessage(json));
+            return true;
+        } catch (JsonProcessingException ex) {
+            log.warn("[Consumer] publish serialization failed for queue '{}': {}", queueName, ex.getMessage());
+        } catch (IOException ex) {
+            log.warn("[Consumer] publish send failed for queue '{}': {}", queueName, ex.getMessage());
+        }
+        return false;
     }
 
     @PreDestroy

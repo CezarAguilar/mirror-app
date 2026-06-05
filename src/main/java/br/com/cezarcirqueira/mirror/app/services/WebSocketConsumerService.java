@@ -2,6 +2,7 @@ package br.com.cezarcirqueira.mirror.app.services;
 
 import br.com.cezarcirqueira.mirror.app.model.ConnectionMode;
 import br.com.cezarcirqueira.mirror.app.model.dto.ConsumerStatusResponse;
+import br.com.cezarcirqueira.mirror.app.model.dto.GenericMessageApi;
 
 public interface WebSocketConsumerService {
 
@@ -12,4 +13,6 @@ public interface WebSocketConsumerService {
     boolean isConnected();
 
     ConsumerStatusResponse getStatus();
+
+    boolean publish(String queueName, String destinationId, GenericMessageApi payload);
 }
