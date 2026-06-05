@@ -5,6 +5,7 @@ import br.com.cezarcirqueira.mirror.app.exceptions.ResourceNotFoundException;
 import br.com.cezarcirqueira.mirror.app.model.dto.EncryptedTargetPayload;
 import br.com.cezarcirqueira.mirror.app.model.dto.SyncFolderRequest;
 import br.com.cezarcirqueira.mirror.app.model.dto.SyncFolderResponse;
+import br.com.cezarcirqueira.mirror.app.model.dto.tree.DirectoryDTO;
 import br.com.cezarcirqueira.mirror.app.services.AuditService;
 import br.com.cezarcirqueira.mirror.app.services.CryptoService;
 import br.com.cezarcirqueira.mirror.app.services.ReplayProtectionService;
@@ -84,6 +85,12 @@ public class SyncFolderResource {
     public ResponseEntity<Void> delete(@PathVariable UUID guid) {
         service.delete(guid);
         return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{guid}/content")
+    public ResponseEntity<DirectoryDTO> listContent(@PathVariable UUID guid) {
+        DirectoryDTO content = service.listContent(guid);
+        return ResponseEntity.ok(content);
     }
 
     @GetMapping("/{guid}/download")

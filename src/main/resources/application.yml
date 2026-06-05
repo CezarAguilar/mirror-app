@@ -58,6 +58,21 @@ mirror-app:
     key-alias: mirror-app
     key-password: changeit
 
+  sync-folder:
+    # Patterns supported by the listing filter:
+    #   *.ext     -> any file with the given extension (e.g. "*.tmp")
+    #   .name     -> directory whose name is exactly ".name" (e.g. ".git")
+    #   name.ext  -> file with this exact full name (e.g. "Thumbs.db")
+    #   name      -> directory named "name" OR file named "name" without extension
+    ignore:
+      - ".git"
+      - ".idea"
+      - "node_modules"
+      - "target"
+      - "*.tmp"
+      - "Thumbs.db"
+      - ".DS_Store"
+
   cors:
     # Permissive defaults for LAN/dev. In production, restrict this list to known
     # origins, e.g. ["http://app.example.com", "https://*.example.com"].

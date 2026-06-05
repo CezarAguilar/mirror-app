@@ -3,6 +3,7 @@ package br.com.cezarcirqueira.mirror.app.services.impl;
 import br.com.cezarcirqueira.mirror.app.model.SyncFolder;
 import br.com.cezarcirqueira.mirror.app.repositories.SyncFolderRepository;
 import br.com.cezarcirqueira.mirror.app.services.FolderWatcherService;
+import br.com.cezarcirqueira.mirror.app.util.HashUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +22,6 @@ import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -197,7 +197,7 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
             int maxRetries = 5;
             for (int i = 0; i < maxRetries; i++) {
                 try {
-                    sha256 = calculateSHA256(path);
+                    sha256 = HashUtils.sha256(path);
                     break;
                 } catch (IOException e) {
                     if (i == maxRetries - 1) {
@@ -222,22 +222,6 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
         System.out.printf("%s %s %s %s [%s]%n", guid, timestamp, relativePath, sha256, eventType);
     }
 
-    private String calculateSHA256(Path file) throws NoSuchAlgorithmException, IOException {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] fileBytes = Files.readAllBytes(file);
-        byte[] hashBytes = digest.digest(fileBytes);
-        
-        StringBuilder hexString = new StringBuilder();
-        for (byte b : hashBytes) {
-            String hex = Integer.toHexString(0xff & b);
-            if (hex.length() == 1) {
-                hexString.append('0');
-            }
-            hexString.append(hex);
-        }
-        return hexString.toString();
-    }
-    
     @SuppressWarnings("unchecked")
     static <T> WatchEvent<T> cast(WatchEvent<?> event) {
         return (WatchEvent<T>)event;

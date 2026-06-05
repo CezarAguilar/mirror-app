@@ -2,6 +2,7 @@ package br.com.cezarcirqueira.mirror.app.services;
 
 import br.com.cezarcirqueira.mirror.app.model.dto.SyncFolderRequest;
 import br.com.cezarcirqueira.mirror.app.model.dto.SyncFolderResponse;
+import br.com.cezarcirqueira.mirror.app.model.dto.tree.DirectoryDTO;
 import java.util.List;
 import java.util.UUID;
 
@@ -16,4 +17,6 @@ public interface SyncFolderService {
     SyncFolderResponse update(UUID guid, SyncFolderRequest request);
 
     void delete(UUID guid);
+
+    DirectoryDTO listContent(UUID guid);
 }
