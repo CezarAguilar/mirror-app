@@ -19,6 +19,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
@@ -26,6 +27,7 @@ import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 import java.util.Base64;
 
@@ -174,13 +176,44 @@ public class CryptoServiceImpl implements CryptoService {
 
     @Override
     public String wrapSessionKey(SecretKey sessionKey) {
+        return wrapSessionKey(sessionKey, serverKeyPair.getPublic());
+    }
+
+    @Override
+    public String wrapSessionKey(SecretKey sessionKey, String peerPublicKeyPem) {
+        if (peerPublicKeyPem == null || peerPublicKeyPem.isBlank()) {
+            throw new IllegalArgumentException("Peer public key PEM is required");
+        }
+        return wrapSessionKey(sessionKey, parsePublicKey(peerPublicKeyPem));
+    }
+
+    private String wrapSessionKey(SecretKey sessionKey, PublicKey publicKey) {
         try {
             Cipher cipher = Cipher.getInstance(RSA_TRANSFORMATION);
-            cipher.init(Cipher.ENCRYPT_MODE, serverKeyPair.getPublic());
+            cipher.init(Cipher.ENCRYPT_MODE, publicKey);
             byte[] wrapped = cipher.doFinal(sessionKey.getEncoded());
             return Base64.getEncoder().encodeToString(wrapped);
         } catch (GeneralSecurityException e) {
             throw new IllegalStateException("Failed to wrap session key: " + e.getMessage(), e);
+        }
+    }
+
+    private PublicKey parsePublicKey(String pem) {
+        String stripped = pem
+                .replace("-----BEGIN PUBLIC KEY-----", "")
+                .replace("-----END PUBLIC KEY-----", "")
+                .replaceAll("\\s+", "");
+        if (stripped.isEmpty()) {
+            throw new IllegalArgumentException("Peer public key PEM has no body");
+        }
+        try {
+            byte[] der = Base64.getDecoder().decode(stripped);
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            return keyFactory.generatePublic(new X509EncodedKeySpec(der));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Peer public key PEM is not valid Base64: " + e.getMessage(), e);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalArgumentException("Peer public key PEM could not be parsed as RSA: " + e.getMessage(), e);
         }
     }
 

@@ -14,6 +14,7 @@ public class WebSocketMessagePayload {
     private String type;
     private String messageId;
     private String queue;
+    private String senderId;
     private String destinationId;
     private JsonNode payload;
 }

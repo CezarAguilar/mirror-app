@@ -70,6 +70,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
                     .type("NEW_MESSAGE")
                     .messageId(messageId)
                     .queue(queue.getName())
+                    .senderId(payload.getSenderId())
                     .payload(payload.getPayload())
                     .build();
 

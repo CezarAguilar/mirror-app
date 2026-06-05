@@ -21,6 +21,8 @@ public interface CryptoService {
 
     String wrapSessionKey(SecretKey sessionKey);
 
+    String wrapSessionKey(SecretKey sessionKey, String peerPublicKeyPem);
+
     String encryptToBase64(String plaintext, SecretKey sessionKey);
 
     void decryptStream(InputStream input, OutputStream output, SecretKey sessionKey) throws IOException;

@@ -1,8 +1,17 @@
 package br.com.cezarcirqueira.mirror.app.services.impl;
 
 import br.com.cezarcirqueira.mirror.app.model.ConnectionMode;
+import br.com.cezarcirqueira.mirror.app.model.SyncFolder;
 import br.com.cezarcirqueira.mirror.app.model.dto.ConsumerStatusResponse;
+import br.com.cezarcirqueira.mirror.app.model.dto.WebSocketMessagePayload;
+import br.com.cezarcirqueira.mirror.app.model.dto.sync.FileSyncMessage;
+import br.com.cezarcirqueira.mirror.app.repositories.SyncFolderRepository;
 import br.com.cezarcirqueira.mirror.app.services.WebSocketConsumerService;
+import br.com.cezarcirqueira.mirror.app.sync.InstanceIdentityService;
+import br.com.cezarcirqueira.mirror.app.sync.PeerDownloadClient;
+import br.com.cezarcirqueira.mirror.app.sync.SyncConstants;
+import br.com.cezarcirqueira.mirror.app.util.HashUtils;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,7 +24,13 @@ import org.springframework.web.socket.client.WebSocketClient;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.io.IOException;
 import java.net.URI;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,7 +42,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @Service
 public class WebSocketConsumerServiceImpl implements WebSocketConsumerService {
 
-    private static final List<String> SUBSCRIBED_QUEUES = List.of("fileSync", "mouseCommand");
+    private static final String FILE_SYNC_QUEUE = "fileSync";
+    private static final List<String> SUBSCRIBED_QUEUES = List.of(FILE_SYNC_QUEUE, "mouseCommand");
     private static final long CONNECT_TIMEOUT_SECONDS = 5L;
     private static final long HANDSHAKE_VERIFY_DELAY_MS = 200L;
 
@@ -38,9 +54,21 @@ public class WebSocketConsumerServiceImpl implements WebSocketConsumerService {
 
     private final WebSocketClient client = new StandardWebSocketClient();
     private final int serverPort;
+    private final ObjectMapper objectMapper;
+    private final SyncFolderRepository syncFolderRepository;
+    private final InstanceIdentityService instanceIdentityService;
+    private final PeerDownloadClient peerDownloadClient;
 
-    public WebSocketConsumerServiceImpl(@Value("${server.port:8080}") int serverPort) {
+    public WebSocketConsumerServiceImpl(@Value("${server.port:8080}") int serverPort,
+                                        ObjectMapper objectMapper,
+                                        SyncFolderRepository syncFolderRepository,
+                                        InstanceIdentityService instanceIdentityService,
+                                        PeerDownloadClient peerDownloadClient) {
         this.serverPort = serverPort;
+        this.objectMapper = objectMapper;
+        this.syncFolderRepository = syncFolderRepository;
+        this.instanceIdentityService = instanceIdentityService;
+        this.peerDownloadClient = peerDownloadClient;
     }
 
     @Override
@@ -160,6 +188,127 @@ public class WebSocketConsumerServiceImpl implements WebSocketConsumerService {
         return URI.create("ws://" + host + "/ws/" + queueName);
     }
 
+    private String resolvePeerBaseUrl() {
+        String addr = currentServerAddress.get();
+        if (addr == null || addr.isBlank()) {
+            return null;
+        }
+        int colonIdx = addr.indexOf(':');
+        String host = colonIdx >= 0 ? addr.substring(0, colonIdx) : addr;
+        return "http://" + host + ":" + serverPort;
+    }
+
+    private void processFileSyncEnvelope(String body) {
+        WebSocketMessagePayload envelope;
+        try {
+            envelope = objectMapper.readValue(body, WebSocketMessagePayload.class);
+        } catch (IOException ex) {
+            log.warn("[Consumer] fileSync envelope parse failed: {}", ex.getMessage());
+            return;
+        }
+
+        String localInstanceId = instanceIdentityService.getInstanceId();
+        if (localInstanceId != null && localInstanceId.equals(envelope.getSenderId())) {
+            log.debug("[Consumer] fileSync skipped: senderId matches local instance");
+            return;
+        }
+
+        if (envelope.getPayload() == null) {
+            log.debug("[Consumer] fileSync skipped: empty payload");
+            return;
+        }
+
+        FileSyncMessage msg;
+        try {
+            msg = objectMapper.treeToValue(envelope.getPayload(), FileSyncMessage.class);
+        } catch (IOException ex) {
+            log.warn("[Consumer] fileSync payload parse failed: {}", ex.getMessage());
+            return;
+        }
+
+        try {
+            applyFileSyncMessage(msg);
+        } catch (IOException ex) {
+            log.warn("[Consumer] fileSync apply failed guid={} path={}: {}",
+                    msg.getFolderGuid(), msg.getPath(), ex.getMessage());
+        } catch (RuntimeException ex) {
+            log.warn("[Consumer] fileSync apply error guid={} path={}: {}",
+                    msg.getFolderGuid(), msg.getPath(), ex.getMessage(), ex);
+        }
+    }
+
+    private void applyFileSyncMessage(FileSyncMessage msg) throws IOException {
+        if (msg == null || msg.getFolderGuid() == null || msg.getEventType() == null) {
+            log.warn("[Consumer] fileSync skipped: incomplete message {}", msg);
+            return;
+        }
+
+        SyncFolder folder = syncFolderRepository.findByGuid(msg.getFolderGuid()).orElse(null);
+        if (folder == null) {
+            log.info("[Consumer] fileSync ignored: folder {} not configured locally", msg.getFolderGuid());
+            return;
+        }
+
+        String relative = msg.getPath() == null ? "" : msg.getPath().replaceFirst("^[/\\\\]+", "");
+        if (relative.isBlank()) {
+            log.warn("[Consumer] fileSync rejected: empty relative path for folder {}", msg.getFolderGuid());
+            return;
+        }
+
+        Path base = Paths.get(folder.getBasePath()).toAbsolutePath().normalize();
+        Path target = base.resolve(relative).toAbsolutePath().normalize();
+        if (!target.startsWith(base)) {
+            log.warn("[Consumer] fileSync rejected: path escapes base ({} not under {})", target, base);
+            return;
+        }
+
+        switch (msg.getEventType()) {
+            case DELETED -> applyDelete(msg, target);
+            case CREATED, MODIFIED -> applyUpsert(msg, target, relative);
+        }
+    }
+
+    private void applyDelete(FileSyncMessage msg, Path target) throws IOException {
+        boolean removed = Files.deleteIfExists(target);
+        log.info("[Consumer] fileSync delete guid={} path={} removed={}",
+                msg.getFolderGuid(), target, removed);
+    }
+
+    private void applyUpsert(FileSyncMessage msg, Path target, String relative) throws IOException {
+        if (Files.isRegularFile(target)) {
+            String localHash = HashUtils.sha256Quietly(target);
+            if (msg.getHash() != null && msg.getHash().equals(localHash)) {
+                log.debug("[Consumer] fileSync same-hash no-op guid={} path={}",
+                        msg.getFolderGuid(), target);
+                return;
+            }
+        }
+
+        Path parent = target.getParent();
+        if (parent != null) {
+            Files.createDirectories(parent);
+        }
+
+        Path tmp = target.resolveSibling(SyncConstants.SYNC_FILE_PREFIX + target.getFileName());
+        String peerBaseUrl = resolvePeerBaseUrl();
+        if (peerBaseUrl == null) {
+            log.warn("[Consumer] fileSync cannot download: no server address known");
+            return;
+        }
+
+        log.info("[Consumer] fileSync downloading guid={} path={} from={}",
+                msg.getFolderGuid(), relative, peerBaseUrl);
+        peerDownloadClient.downloadTo(peerBaseUrl, msg.getFolderGuid(), relative, tmp);
+
+        try {
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ex) {
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        log.info("[Consumer] fileSync applied guid={} path={}", msg.getFolderGuid(), target);
+    }
+
     private void closeAllSessions() {
         sessions.forEach((queue, session) -> {
             try {
@@ -184,7 +333,11 @@ public class WebSocketConsumerServiceImpl implements WebSocketConsumerService {
 
         @Override
         protected void handleTextMessage(WebSocketSession session, TextMessage message) {
-            log.info("[Consumer] queue='{}' message={}", queueName, message.getPayload());
+            String body = message.getPayload();
+            log.info("[Consumer] queue='{}' message={}", queueName, body);
+            if (FILE_SYNC_QUEUE.equals(queueName)) {
+                processFileSyncEnvelope(body);
+            }
         }
 
         @Override

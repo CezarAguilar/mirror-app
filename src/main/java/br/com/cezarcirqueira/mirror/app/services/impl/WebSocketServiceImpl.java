@@ -6,6 +6,7 @@ import br.com.cezarcirqueira.mirror.app.model.dto.GenericMessageApi;
 import br.com.cezarcirqueira.mirror.app.model.dto.PublishMessageResponse;
 import br.com.cezarcirqueira.mirror.app.model.dto.WebSocketMessagePayload;
 import br.com.cezarcirqueira.mirror.app.services.WebSocketService;
+import br.com.cezarcirqueira.mirror.app.sync.InstanceIdentityService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class WebSocketServiceImpl implements WebSocketService {
 
     private final ObjectMapper objectMapper;
+    private final InstanceIdentityService instanceIdentityService;
 
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
     private final Map<String, WebSocketQueue> activeQueues = new ConcurrentHashMap<>();
@@ -120,6 +122,7 @@ public class WebSocketServiceImpl implements WebSocketService {
                 .type("NEW_MESSAGE")
                 .messageId(messageId)
                 .queue(queueName)
+                .senderId(instanceIdentityService.getInstanceId())
                 .payload(payloadNode)
                 .build();
 

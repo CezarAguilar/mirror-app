@@ -6,6 +6,7 @@ import br.com.cezarcirqueira.mirror.app.model.dto.sync.FileSyncMessage;
 import br.com.cezarcirqueira.mirror.app.repositories.SyncFolderRepository;
 import br.com.cezarcirqueira.mirror.app.services.FolderWatcherService;
 import br.com.cezarcirqueira.mirror.app.services.WebSocketService;
+import br.com.cezarcirqueira.mirror.app.sync.SyncConstants;
 import br.com.cezarcirqueira.mirror.app.util.HashUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -190,6 +191,12 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
 
     private void processEvent(UUID guid, Path basePath, Path path, FileSyncEventType eventType) {
         String relativePath = basePath.relativize(path).toString().replace("\\", "/");
+
+        Path fileName = path.getFileName();
+        if (fileName != null && fileName.toString().startsWith(SyncConstants.SYNC_FILE_PREFIX)) {
+            log.debug("sync-event guid={} path={} type={} skipped=prefix", guid, relativePath, eventType);
+            return;
+        }
 
         if (eventType != FileSyncEventType.DELETED && Files.isDirectory(path)) {
             log.debug("sync-event guid={} path={} type={} skipped=directory", guid, relativePath, eventType);
