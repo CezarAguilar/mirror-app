@@ -2,6 +2,7 @@ package br.com.cezarcirqueira.mirror.app.services;
 
 import br.com.cezarcirqueira.mirror.app.model.WebSocketQueue;
 import br.com.cezarcirqueira.mirror.app.model.WebSocketStatus;
+import br.com.cezarcirqueira.mirror.app.model.dto.GenericMessageApi;
 import br.com.cezarcirqueira.mirror.app.model.dto.PublishMessageResponse;
 
 import java.util.List;
@@ -23,5 +24,5 @@ public interface WebSocketService {
 
     Map<String, List<String>> getClients();
 
-    PublishMessageResponse publish(String queueName, String destinationId, Map<String, Object> payload);
+    PublishMessageResponse publish(String queueName, String destinationId, GenericMessageApi payload);
 }

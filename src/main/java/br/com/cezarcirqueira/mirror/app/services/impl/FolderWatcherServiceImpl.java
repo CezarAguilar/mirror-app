@@ -1,8 +1,11 @@
 package br.com.cezarcirqueira.mirror.app.services.impl;
 
 import br.com.cezarcirqueira.mirror.app.model.SyncFolder;
+import br.com.cezarcirqueira.mirror.app.model.dto.sync.FileSyncEventType;
+import br.com.cezarcirqueira.mirror.app.model.dto.sync.FileSyncMessage;
 import br.com.cezarcirqueira.mirror.app.repositories.SyncFolderRepository;
 import br.com.cezarcirqueira.mirror.app.services.FolderWatcherService;
+import br.com.cezarcirqueira.mirror.app.services.WebSocketService;
 import br.com.cezarcirqueira.mirror.app.util.HashUtils;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -23,8 +26,6 @@ import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.security.NoSuchAlgorithmException;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,10 +39,12 @@ import java.util.concurrent.Executors;
 @RequiredArgsConstructor
 public class FolderWatcherServiceImpl implements FolderWatcherService {
 
+    private static final String FILE_SYNC_QUEUE = "fileSync";
+
     private final SyncFolderRepository repository;
+    private final WebSocketService webSocketService;
     private final Map<UUID, WatchService> watchServices = new ConcurrentHashMap<>();
     private final ExecutorService executorService = Executors.newCachedThreadPool();
-    private final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
 
     private WatchEvent.Modifier fileTreeModifier;
 
@@ -160,18 +163,14 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
 
                     try {
                         if (kind == StandardWatchEventKinds.ENTRY_CREATE) {
-                            if (Files.isDirectory(child)) {
-                                if (fileTreeModifier == null) {
-                                    registerDirectory(child, watchService, keys);
-                                }
-                                processEvent(guid, basePath, child, "CREATED");
-                            } else {
-                                processEvent(guid, basePath, child, "CREATED");
+                            if (Files.isDirectory(child) && fileTreeModifier == null) {
+                                registerDirectory(child, watchService, keys);
                             }
+                            processEvent(guid, basePath, child, FileSyncEventType.CREATED);
                         } else if (kind == StandardWatchEventKinds.ENTRY_MODIFY) {
-                            processEvent(guid, basePath, child, "MODIFIED");
+                            processEvent(guid, basePath, child, FileSyncEventType.MODIFIED);
                         } else if (kind == StandardWatchEventKinds.ENTRY_DELETE) {
-                            processEvent(guid, basePath, child, "DELETED");
+                            processEvent(guid, basePath, child, FileSyncEventType.DELETED);
                         }
                     } catch (IOException e) {
                         log.error("Error processing event", e);
@@ -189,37 +188,71 @@ public class FolderWatcherServiceImpl implements FolderWatcherService {
         });
     }
 
-    private void processEvent(UUID guid, Path basePath, Path path, String eventType) {
+    private void processEvent(UUID guid, Path basePath, Path path, FileSyncEventType eventType) {
         String relativePath = basePath.relativize(path).toString().replace("\\", "/");
-        String sha256 = "N/A";
-        
-        if (!"DELETED".equals(eventType) && Files.exists(path) && !Files.isDirectory(path)) {
-            int maxRetries = 5;
-            for (int i = 0; i < maxRetries; i++) {
-                try {
-                    sha256 = HashUtils.sha256(path);
-                    break;
-                } catch (IOException e) {
-                    if (i == maxRetries - 1) {
-                         log.warn("Failed to calculate SHA-256 for file after retries (file might be locked): {}", path);
-                    } else {
-                        try {
-                            Thread.sleep(100);
-                        } catch (InterruptedException ie) {
-                            Thread.currentThread().interrupt();
-                        }
-                    }
-                } catch (NoSuchAlgorithmException e) {
-                    log.error("SHA-256 algorithm not found", e);
-                    break;
-                }
-            }
-        } else if (Files.isDirectory(path)) {
-            sha256 = "DIRECTORY";
+
+        if (eventType != FileSyncEventType.DELETED && Files.isDirectory(path)) {
+            log.debug("sync-event guid={} path={} type={} skipped=directory", guid, relativePath, eventType);
+            return;
         }
-        
-        String timestamp = LocalDateTime.now().format(formatter);
-        System.out.printf("%s %s %s %s [%s]%n", guid, timestamp, relativePath, sha256, eventType);
+
+        String hash = null;
+        if (eventType != FileSyncEventType.DELETED) {
+            if (!Files.isRegularFile(path)) {
+                log.debug("sync-event guid={} path={} type={} skipped=not-regular-file", guid, relativePath, eventType);
+                return;
+            }
+            hash = computeHashWithRetry(path);
+            if (hash == null) {
+                log.warn("sync-event guid={} path={} type={} skipped=hash-unavailable", guid, relativePath, eventType);
+                return;
+            }
+        }
+
+        log.info("sync-event guid={} path={} hash={} type={}", guid, relativePath, hash, eventType);
+
+        if (!webSocketService.isRunning()) {
+            log.debug("sync-event guid={} path={} type={} skipped=websocket-stopped", guid, relativePath, eventType);
+            return;
+        }
+
+        FileSyncMessage message = FileSyncMessage.builder()
+                .folderGuid(guid)
+                .path(relativePath)
+                .hash(hash)
+                .eventType(eventType)
+                .build();
+
+        try {
+            webSocketService.publish(FILE_SYNC_QUEUE, null, message);
+        } catch (RuntimeException ex) {
+            log.warn("Failed to publish sync-event guid={} path={} type={}: {}",
+                    guid, relativePath, eventType, ex.getMessage());
+        }
+    }
+
+    private String computeHashWithRetry(Path path) {
+        int maxRetries = 5;
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                return HashUtils.sha256(path);
+            } catch (IOException e) {
+                if (i == maxRetries - 1) {
+                    log.warn("Failed to calculate SHA-256 for file after retries (file might be locked): {}", path);
+                    return null;
+                }
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    return null;
+                }
+            } catch (NoSuchAlgorithmException e) {
+                log.error("SHA-256 algorithm not found", e);
+                return null;
+            }
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")

@@ -2,10 +2,12 @@ package br.com.cezarcirqueira.mirror.app.services.impl;
 
 import br.com.cezarcirqueira.mirror.app.model.WebSocketQueue;
 import br.com.cezarcirqueira.mirror.app.model.WebSocketStatus;
+import br.com.cezarcirqueira.mirror.app.model.dto.GenericMessageApi;
 import br.com.cezarcirqueira.mirror.app.model.dto.PublishMessageResponse;
 import br.com.cezarcirqueira.mirror.app.model.dto.WebSocketMessagePayload;
 import br.com.cezarcirqueira.mirror.app.services.WebSocketService;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -91,7 +93,7 @@ public class WebSocketServiceImpl implements WebSocketService {
     }
 
     @Override
-    public PublishMessageResponse publish(String queueName, String destinationId, Map<String, Object> payload) {
+    public PublishMessageResponse publish(String queueName, String destinationId, GenericMessageApi payload) {
         if (queueName == null || queueName.isBlank()) {
             throw new IllegalArgumentException("Queue name is required");
         }
@@ -113,11 +115,12 @@ public class WebSocketServiceImpl implements WebSocketService {
                     .build();
         }
 
+        JsonNode payloadNode = payload == null ? null : objectMapper.valueToTree(payload);
         WebSocketMessagePayload outboundPayload = WebSocketMessagePayload.builder()
                 .type("NEW_MESSAGE")
                 .messageId(messageId)
                 .queue(queueName)
-                .payload(payload)
+                .payload(payloadNode)
                 .build();
 
         TextMessage textMessage;
